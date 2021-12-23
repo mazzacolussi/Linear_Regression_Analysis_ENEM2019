@@ -1,0 +1,623 @@
+---
+title: 
+author: 
+date: 
+output: 
+  pdf_document:
+    number_sections: true  
+    fig_caption: yes
+    keep_tex: yes
+header-includes:
+  - \usepackage[portuges]{babel}
+  - \usepackage[utf8]{inputenc}
+  - \usepackage[T1]{fontenc}
+  - \usepackage[fixlanguage]{babelbib}
+  
+  - \usepackage{graphicx}
+  - \usepackage{wrapfig}
+  - \usepackage[final]{pdfpages}
+  
+  - \usepackage{multicol}
+  
+  - \usepackage{amsfonts}
+  - \usepackage{amssymb}
+  - \usepackage{amsmath}
+  
+  - \usepackage{fancyhdr}
+  - \usepackage{subcaption}
+  - \usepackage{booktabs}
+  - \usepackage[font=small]{caption}
+  
+  - \usepackage{color}
+  - \usepackage[titletoc,title,toc,page]{appendix}
+  - \newcommand{\bmcols}{\begin{multicols}{2}}
+  - \newcommand{\emcols}{\end{multicols}}
+  
+tables: true
+fontsize: 11pt
+---
+
+```{r message=FALSE, include=FALSE}
+
+# Loads packages
+
+library(tidyverse)
+library(kableExtra)
+library(MASS)
+library(janitor)
+library(bestglm)
+library(leaps)
+library(gridExtra)
+library(ggfortify)
+library(broom)
+library(viridis)
+library('car')
+library(ggpubr)
+library(polycor)
+library(ggcorrplot)
+
+# Reads the dataset
+
+dat = read_csv("SP.csv")
+
+```
+
+
+\begin{titlepage} 
+\begin{center} 
+
+\vfill
+\includegraphics[width=0.2\textwidth]{logo-imecc (1) (1).png}\\[0.1in]
+
+{\large Universidade Estadual de Campinas}\\[0.2cm] 
+{\large Instituto de Matemática, Estatística e Matemática Computacional - IMECC}\\[0.2cm] 
+{\large Análise de Regressão linear - ME613}\\[5cm]
+
+
+{\bf \Large Análise de desempenho dos candidatos do ENEM-2019}\\[0.2cm]
+{\bf \Large (São Paulo)}\\[5cm]
+   
+{\large Leonardo Mazzamboni Colussi}\\ [2cm]
+
+{\large Campinas, 2021.}\\[0.2cm]
+
+
+\end{center}
+\end{titlepage}
+
+\newpage
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents
+\cleardoublepage
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE,
+                      warning = FALSE,
+                      tidy.opts = list(width.cutoff = 60, 
+                                       out.width = "0.8\\linewidth",
+                                       fig.align = "center",
+                                       fig.pos = 'H'),
+                      tidy = TRUE,
+                      cache = T)
+options(OutDec = ",", 
+        knitr.table.format = "latex", 
+        xtable.comment = FALSE,
+        knitr.kable.NA = '',
+        knitr.kable.linesep = "")
+
+```
+
+\setlength{\parskip}{0\baselineskip plus2pt minus0pt}
+
+\section{Introdução}
+
+\quad Este projeto consiste em realizar uma análise do desempenho médio dos candidatos (não-treineiros) do Exame Nacional do Ensino Médio (ENEM) de 2019, referente ao estado de São Paulo, identificando possíveis variáveis que podem estar associadas ao desempenho dos candidatos e, posteriormente, construir um modelo para uma análise quantitativa. Dessa forma, na primeira seção do projeto será feita uma análise descritiva dessas variáveis presentes no banco de dados utilizado. Por sua vez, na segunda seção, será feito uma modelagem estatística, assim como as etapas para a sua construção. Na última seção, por fim, será apresentado a interpretação dos resultados e a conclusão a respeito do trabalho realizado.
+
+\quad Desse modo, foi utilizado um banco de dados que apresenta 500 observações, exclusivamente, de candidatos do estado de São Paulo, as quais contém, além das notas médias dos candidatos, informações que podem estar associadas ao desempenho, como idade, sexo, estado civil, tipo de escola do Ensino Médio (pública ou privada), raça/cor, renda, número de pessoas que residem na casa onde mora, acesso à internet, renda familiar mensal e escolaridade dos pais. 
+
+\section{Análise descritiva dos dados}
+
+```{r message=FALSE, include=FALSE}
+
+# Organizes the dataset
+
+dat1 = dat %>% 
+        transmute(TP_Esc = as.factor(TP_ESCOLA),
+               idade = NU_IDADE,
+               sexo = as.factor(TP_SEXO),
+               raca = as.factor(TP_COR_RACA),
+               Esc_p = as.factor(Q001),
+               Esc_m = as.factor(Q002),
+               renda = as.factor(Q006),
+               n_res = Q005,
+               media = NU_MED)
+```
+
+
+\quad Antes de iniciar a modelagem, foi realizado uma análise descritiva dos dados para entender o comportamento das variáveis que podem compor um estudo mais interessante conforme os dados estão disponíveis. Desse modo, há variáveis que são intuítivas e, de primeira vista, podem levar a acreditar que apresentam forte associação em relação ao desempenho dos candidatos no exame, no entanto, deve-se observar a disposição dos dados para ver se essa é representativa no conjunto utilizado.
+
+\quad Sendo assim, no que tange à variável `Internet`, tem-se a Tabela \ref{tab:tab1} que demonstra a quantidade e a porcentagem dos candidatos que possuíam acesso  e os que não.
+
+
+```{r tab1, echo = FALSE, warning = FALSE, message = FALSE}
+
+## Descriptive analysis 
+
+# "internet acess" feature
+
+tab_internet = dat %>% 
+  mutate(Q025 = ifelse(Q025 == "A", "Não", "Sim")) %>% 
+  tabyl(Q025) %>% 
+  group_by(Q025) %>%
+  summarise(Quantidade = sum(n), 
+            Porcentagem = sum(percent)*100)
+
+colnames(tab_internet) = c("Internet", "Quantidade", "Porcentagem (%)")
+
+kable(tab_internet, booktabs = TRUE,  
+      caption = "Disposição dos dados referente ao acesso à internet.", 
+      digits = 2) %>% 
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+```
+
+
+\quad Note que, embora seja uma variável interessante de se considerar na modelagem e também intuitiva de que esteja associada ao desempenho dos candidatos, a quantidade de quem não tinha acesso ($5,4\%$) é pouco representativa quando comparada a quem tinha ($94,6\%$). Além disso, devido ao estado de SP ser um dos mais desenvolvidos do Brasil, o acesso à internet ser majoriatariamente positivo neste conjunto de dados pode ser reflexo desse fato, em contrapartida, pode não ser a realidade de outros estados brasileiros menos desenvolvidos no país, ou até  de regiões mais desabastadas desse mesmo estado.
+
+
+```{r tab2, echo = FALSE, warning = FALSE, message = FALSE}
+
+# "marital status" feature
+
+tab_civil = dat %>% mutate(TP_ESTADO_CIVIL = ifelse(TP_ESTADO_CIVIL == "1", 
+                                                    "Solteiro(a)", "Outros")) %>% 
+            tabyl(TP_ESTADO_CIVIL) %>% 
+            group_by(TP_ESTADO_CIVIL) %>% 
+            summarise(Quantidade = sum(n),
+                      Porcentagem = sum(percent)*100) %>%  
+            arrange(desc(Quantidade))
+
+colnames(tab_civil) = c("Estado Civil", "Quantidade", "Porcentagem (%)")
+
+kable(tab_civil, booktabs = TRUE,  
+      caption = "Disposição dos dados referente ao estado civil.", 
+      label = "tab2", digits = 2) %>% 
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+```
+
+\newpage
+
+\quad A mesma situação ocorre com a variável `Estado Civil`, Tabela \ref{tab:tab2}, que descreve a porcentagem de candidatos solteiros ou não. Notoriamente, essa variável se encontra muito mal distribuída, onde $99,2\%$ dos candidatos são solteiros e apenas $0,8\%$ não são, de modo que é pouco representativa para se usar na modelagem, podendo inflacionar o modelo com variáveis pouco informativas. 
+
+\quad Para a variável idade, nota-se que, apesar de existir pessoas acima da faixa de 17-18 anos, ao observar para a mediana (Tabela \ref{tab:tab3}), que é uma medida robusta, essa é igual a 17 anos, além disso, o terceiro quartil ainda está nesse intervalo, evidenciando que a maioria dos candidatos se encontra nessa faixa etária.
+
+
+```{r tab3, echo = FALSE, warning = FALSE, message = FALSE}
+
+# "age" feature
+
+tab_idade = t(as.data.frame(c(summary(dat1$idade)))) 
+rownames(tab_idade) = NULL
+
+kable(tab_idade, booktabs = TRUE,  
+      col.names = c("Mínimo", "1º quartil", "Mediana", "3º quartil", "Média", "Máximo"),
+      caption = "Disposição dos dados referente à idade.", label = "tab3", digits = 2) %>% 
+      kable_styling(latex_options = "HOLD_position")
+
+```
+
+
+\quad Ao analisar a Figura \ref{fig:fig1}, a qual compara os grupos de raças e o gênero em relação ao desempenho, é percetível que há diferença entre candidatos pertencentes ao grupo de raça branca/amarela com os de raça preta/parda/indígena, de forma que a mediana da nota média desse segundo grupo é menor que a do primeiro. Além disso, o grupo de raça branca/amarela apresenta maior variabilidade que o grupo de raça preta/parda/indígena, fato que pode estar associado a maior frequência relativa do segundo grupo na escola pública, como consta na Figura \ref{fig:fig2}. Embora a categoria de candidatos pertencentes ao primeiro grupo com acesso a uma escolaridade mais precária também ocorra, para o segundo é ainda mais expressiva. 
+
+\quad Por sua vez, o desempenho dos candidatos do sexo masculino é maior quando comparado com os candidatos do sexo feminino, tal fato não está associado à má distribuição entre os gêneros, dado que esses se encontram bem distribuídos ($57,4\%$ feminino e $42,6\%$ masculino). Ainda, é possível notar que as notas médias dos candidatos estão contidas no intervalo de $300$ a $740$ pontos.
+
+
+```{r fig1, fig.cap = "Variação do desempenho médio por grupo de raças.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 3., fig.width = 5.5, fig.align = "center"}
+
+# Boxplots of exam grades vs. racial groups
+
+boxplot1 = dat1 %>% mutate(raca = ifelse(raca == "1", 
+                                         "Branca/\nAmarela", "Preta/Parda/\nIndígena")) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = raca, y = media)) +
+  theme_bw() +
+  labs(x = "Grupo de Raça", y = "Nota Média", color = "Raça") +
+  theme(legend.position = "none")
+
+# Boxplots of exam grades vs. gender
+
+boxplot2 = dat1 %>% mutate(sexo = ifelse(sexo == "F", "Feminino", "Masculino")) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = sexo, y = media)) +
+  theme_bw() +
+  labs(x = "Sexo", y = "", color = "sexo" ) +
+  theme(legend.position = "none")
+
+grid.arrange(boxplot1, boxplot2, ncol = 2)
+``` 
+
+\newpage
+
+\quad Ainda, referente ao primeiro gráfico da Figura \ref{fig:fig2}, observa-se que o desempenho médio no exame, tanto para os candidatos pertencentes às raças branca/amarela, quanto para às preto/pardo/indígena, são maiores quando alocados na classe D da renda familiar, no entanto, a representatividade deste segundo grupo nesta categoria é muito mais baixa ao comparar ao primeiro (Tabela \ref{tab:tab_g.raças_renda}), fato atrelado a contextos históricos de desigualdade social intrínseco ao contexto racial. Desse modo, as variáveis relacionadas à renda familiar e aos grupos raciais podem estar associadas. A variável renda está separada em quatro categorias: Até R\$ $998,00$ (A); De R\$ $998,01$ até R\$ $1.996,00$ (B); De R\$ $1.996,01$ até R\$ $4.990,00$ (C) e Mais de R\$ $4.990,00$ (D).
+
+```{r fig2, fig.cap = "Boxplots entre grupos de raças e renda familiar em relação ao desempenho do candidato no exame.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 5., fig.width = 6.5, fig.align = "center"}
+
+
+
+graf_2 = dat1 %>% 
+    mutate(Var1 = ifelse(raca == "1", "Branca/Amarela", "Preta/Parda/Indígena")) %>%
+    ggplot(aes(x = renda, y = media , fill = Var1)) +
+    labs(x = "Renda Familiar", y = "Desempenho Médio") +
+    geom_boxplot() + facet_wrap(. ~ Var1) +
+    scale_fill_viridis(discrete = TRUE,  option = "inferno", begin = 0.8, end = 0.6) +
+    theme_bw() + 
+    theme(legend.position = "bottom", strip.text.x = element_blank(),
+          strip.background = element_blank()) +
+    guides(fill = guide_legend(title = "Grupo de Raças"))
+
+
+
+graf_3 = dat1 %>% mutate(Var1 = ifelse(raca == "1",
+                                           "Branca/Amarela", "Preta/Parda/Indígena"),
+                             Var2 = ifelse(TP_Esc == "1", "Pública", "Particular")) %>%
+     ggplot(aes(x = Var2, y = media , fill = Var1)) +
+     labs(x = "Tipo de Escola no Ensino Médio", y = "Desempenho Médio") +
+     geom_boxplot() + facet_wrap(. ~ Var1) +
+     scale_fill_viridis(discrete = TRUE,  option = "inferno", begin = 0.8, end = 0.6) +
+     theme_bw() +
+     theme(legend.position="bottom",strip.text.x = element_blank(),
+           strip.background = element_blank()) +
+     guides(fill = guide_legend(title = "Grupo de Raças"))
+
+ggarrange(graf_2, graf_3, nrow = 2, common.legend = TRUE, legend = "bottom")
+
+```
+
+
+```{r tab_g.raças_renda}
+
+dat_renda = dat1 %>% 
+    mutate(Var1 = ifelse(raca == "1", "Branca/Amarela", "Preta/Parda/Indígena")) 
+
+
+
+table(dat_renda$Var1, dat_renda$renda) %>% as.data.frame() %>% 
+  pivot_wider(Var1, names_from = Var2, values_from = Freq) %>% 
+  kable(booktabs = TRUE,  
+      col.names = c("Grupo de Raças", "A", "B", "C", "D"),
+      caption = "Disposição dos dados referente à renda familiar e ao grupo de raças", digits = 2) %>% 
+      kable_styling(latex_options = "HOLD_position") %>% 
+  add_header_above(c(" " = 1,
+                     "Renda Familiar" = 4))
+
+```
+
+\newpage
+
+\quad Outra variável interessante de se analisar é a escolaridade dos pais (Figura \ref{fig:fig3}) o que, a princípio, é intuitivo que há uma associação entra elas. Ademais, tanto a escolaridade do pai (ou homem responsável) quanto da mãe (ou mulher responsável), foram separadas em quatro categorias: fundamental, médio, superior e "não sabe".
+
+\quad Como se pode ver nos *boxplots* da Figura \ref{fig:fig3}, há uma relação negativa entre o desconhecimento dos candidatos em relação à escolaridade dos pais, independente da renda familiar (exceto para a categoria D, de maior renda), com o desempenho médio do candidato. Isso pode estar associado ao abandono paterno e a falta de auxílio, como pensão, acarretando em uma renda familiar menor. Além disso, para ambos os casos, um maior nível de escolaridade é indício de melhor desempenho dos filhos no exame, dado que, para a categoria de ensino Superior, a mediana das notas é maior em relação as demais, inclusive nas maiores rendas.
+
+
+```{r fig3, fig.cap = "Disposição da escolaridade dos pais por renda familiar em relação ao desempenho dos candidatos no exame.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 4., fig.width = 6.2, fig.align = "center"}
+
+graf.4 = dat1 %>% mutate(Escol_p = ifelse(Esc_p == "A", "Fundamental", 
+                                          ifelse(Esc_p == "B", "Médio", 
+                                                 ifelse(Esc_p == "C", "Superior", "Não Sei")))) %>% 
+         ggplot(aes(x = renda, y = media, 
+                    fill = factor(Escol_p, 
+                                  levels = c("Fundamental", "Médio", "Superior", "Não Sei")))) +
+         geom_boxplot() + 
+         scale_fill_viridis(discrete = TRUE,  option = "inferno", begin = 0.5, end = 0.8) +
+         theme_bw() +
+         labs(x = "Renda Familiar", y = "Desempenho Médio") +
+         theme(strip.text.x = element_blank(), strip.background = element_blank()) +
+         guides(fill = guide_legend(title = "Escolaridade \ndo pai"))
+
+
+graf.5 = dat1 %>% mutate(Escol_m = ifelse(Esc_m == "A", "Fundamental", 
+                                          ifelse(Esc_m == "B", "Médio", 
+                                                 ifelse(Esc_m == "C", "Superior", "Não Sei")))) %>% 
+         ggplot(aes(x = renda, y = media, 
+                    fill = factor(Escol_m, 
+                                  levels = c("Fundamental", "Médio", "Superior", "Não Sei")))) +
+         geom_boxplot() + 
+         scale_fill_viridis(discrete = TRUE,  option = "inferno", begin = 0.5, end = 0.8) +
+         theme_bw() +
+         labs(x = "Renda Familiar", y = "Desempenho Médio") +
+         theme(strip.text.x = element_blank(), strip.background = element_blank()) +
+         guides(fill = guide_legend(title = "Escolaridade \nda mãe"))
+
+
+grid.arrange(graf.4, graf.5, nrow = 2)
+
+```
+
+```{r tabaux, fig.cap = "Quantidade de candidatos conforme o número de pessoas que residem na mesma casa.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 2, fig.width = 3.2, fig.align = "center"}
+
+graf_4 = dat1 %>% tabyl(n_res) %>%
+    ggplot(aes(x = n_res, y = n, fill = "inferno")) +
+    labs(x = "Nº de pessoas na residência", y = "Qnt. de Candidatos") +
+    theme_bw() +
+    geom_bar(stat = "identity", position = "dodge") + 
+    scale_fill_viridis_d(option = "inferno", begin = 0.3) + 
+    scale_x_continuous(breaks = 1:10, limits = c(0, 10)) +
+    theme(legend.position = "none") +
+    guides(fill = guide_legend(title = "Nº de pessoas que residem na mesma casa."))
+
+tab_res = t(as.data.frame(c(summary(dat1$n_res)))) 
+rownames(tab_res) = NULL
+
+kable(tab_res, booktabs = TRUE,   
+      col.names = c("Mínimo", "1º quartil", "Mediana", "3º quartil", "Média", "Máximo"),
+      caption = "Disposição dos dados referente ao Nº de pessoas que residem na mesma casa.",  
+      digits = 2) %>% 
+      kable_styling(latex_options = "HOLD_position")
+```
+
+
+\quad A respeito da variável `Nº de pessoas que residem na casa onde mora` (Tabela \ref{tab:tabaux}), tem-se que a maioria dos candidatos moram com mais 2 ou 3 pessoas na casa, é de conhecimento geral que o mais comum nas famílias paulistas são casas que contém até 5 pessoas, característica de um estado urbanizado. 
+
+\section{Modelagem Estatística}
+
+\subsection{Seleção do Modelo}
+
+\quad Para iniciar a modelagem, desconsiderou-se as variáveis pouco representativas (`Internet` e `Estado Civil`), vistas na seção anterior, dado que são pouco informativas e apenas inflacionariam o modelo com mais variáveis, também analisou-se a correlação entre as demais variáveis, de modo que nenhuma foi maior que $0,65$ e, consequentemente, descartou-se a possibilidade de estarem fortemente correlacionadas a ponto de prejudicar a construção do modelo. Dessa forma, ajustou-se inicialmente um modelo com o tipo de escola do Ensino Médio, renda, raça e sexo, obtendo a Tabela \ref{tab:tab4}.
+
+
+```{r figx, fig.cap = "Gráfico de correlação entre as variáveis do banco de dados.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 5.5, fig.width = 9., fig.align = "center"}
+
+correlacoes = hetcor(dat1)[1]
+df_cor = as.data.frame(correlacoes[1])
+
+colnames(df_cor) = c("TP_Esc", "idade", "sexo", "raca", "Esc_p", "Esc_m", "renda", "n_res", "media")
+
+ggcorrplot(df_cor, hc.order = TRUE, type = "lower", outline.col = "white", lab = TRUE)
+
+```
+
+
+```{r tab4, message = F, echo = F, warning = F}
+
+modelo = lm(media ~ TP_Esc + renda + raca + sexo, dat1)
+
+summ = summary(modelo)[4]$coefficients %>% 
+        data.frame(row.names =  c("Intercepto", "Tipo de Escola (particular)", "Renda B", 
+                                  "Renda C", "Renda D", "Raça      (preto/pardo/indígena)",
+                                  "Sexo (masculino)")) %>%  
+        rownames_to_column("Preditoras") %>% 
+        mutate_at(c("Estimate", "Std..Error", "t.value"), funs(round(., 2))) %>% 
+        rename("p.value" = "Pr...t..") %>% 
+        mutate(p.value = format.pval(p.value, digits = 2, eps = 0.001, na.form = NA))
+
+kable(summ, linesep = "", 
+      col.names = c("Parâmetros", "Estimativas", "Erro Padrão", "Estatística t", "P-valor"), 
+      booktabs = TRUE, 
+      caption = "Tabela dos coeficientes de efeitos fixos estimados no modelo.") %>%
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+``` 
+
+\newpage
+
+\quad Nota-se que todas as variáveis escolhidas, a priori, para o modelo, segundo o $p-valor$ associados às estatísticas $t$, foram significativas a um nível de $\alpha = 5\%$ de significância, com destaque ao `Tipo de Escola` e a `Renda`, as quais foram muito significativas. No entanto, as categorias (B) e (C) da variável `Renda` não foram muito informativas. Dessa forma, decidiu-se juntá-las na casela de refência (categoria (A)), assim, a variável renda passou ter duas categorias: renda familiar menor que R\$ $4990,00$ reais e maior que esse valor. 
+
+\quad  Ademais, da Tabela \ref{tab:tab5} para esse modelo inicial, dado que essas variáveis preditoras foram significativas e,  também não se rejeitou a hipótese nula, associado à estatística $F$, de que os $\beta$'s adicionados eram iguais a zero conforme as outras variáveis já estavam no modelo, decidiu-se mantê-las, pois eram informativas.  
+
+
+```{r tab5, message = F, echo = F, warning = F}
+
+anova1 = anova(modelo)
+
+anova1 = tidy(anova1) %>% 
+      mutate("term" = c("Tipo de Escola", "Renda", "Raça", "Sexo", "Resíduos"))  %>% 
+      mutate(p.value = format.pval(p.value, digits = 3, eps = 0.001, na.form = NA)) %>%
+      mutate_if(is.numeric, funs(as.character(signif(.,3))))
+
+kable(anova1, 
+      col.names = c(" ", "GL", "SQ", "QM", "Estatística F", "P-valor"),
+      booktabs = TRUE,
+      caption = "Tabela ANOVA do primeiro modelo.") %>%
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+```
+
+
+\quad Agora, fazendo a alteração nas categorias da variável `Renda` e adicionando a variável `Escolaridade do pai` no modelo, obteve-se a Tabela \ref{tab:tab6}.
+
+
+```{r tab6, message = F, echo = F, warning = F}
+
+dat1 = dat1 %>% 
+        mutate(renda = ifelse(renda == "D", 1, 0) %>% as.factor())
+
+modelo1 = lm(media ~ TP_Esc + renda + raca + sexo + Esc_p, dat1)
+
+summ1 = summary(modelo1)[4]$coefficients %>% 
+        data.frame(row.names = c("Intercepto", "Tipo de Escola (particular)", 
+                                 "Renda > R$ 4999,00", "Raça (preto/pardo/indígena)",
+                                 "Sexo (masculino)", "Escolaridade do pai (EM)",
+                                 "Escolaridade do pai (Superior)", 
+                                 "Escolaridade do pai (Não sabe)")) %>%  
+        rownames_to_column("Preditoras") %>% 
+        mutate_at(c("Estimate", "Std..Error", "t.value"), funs(round(., 2))) %>%
+        rename("p.value" = "Pr...t..") %>% 
+        mutate(p.value = format.pval(p.value, digits = 2, eps = 0.001)) 
+       
+
+kable(summ1, linesep = "", 
+      col.names = c("Parâmetros", "Estimativas", "Erro Padrão", "Estatística t", "P-valor"), 
+      booktabs = TRUE, 
+      caption = "Coeficientes estimados no modelo com a variável \"Escolaridade do pai\".") %>%
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+```
+
+
+\quad Observe que, embora apenas uma das categorias relacionadas à variável `Escolaridade do pai` foi significativa, decidiu-se manter todas, pois torna o modelo mais condizente e interpretativo, dado que a categoria "Não sabe" pode estar associada a candidatos que não tiveram contato paterno e, de algum modo, refletir na nota média do candidato. Todavia, na Tabela \ref{tab:tab7}, o $p-valor$ referente ao teste $F$ deu menor que o nível de significância $\alpha = 5\%$, sendo assim, há evidências para rejeitar hipótese nula de que os $\beta$'s associados à variável `Escolaridade do pai` é igual a zero. Logo, temos evidência que essa variável possui influência no desempenho do candidato, dado que as outras variáveis já estavam no modelo anterior.
+
+\quad Para finalizar a escolha do modelo, adicionou-se todas as outras variáveis, inclusive todos os possíveis pares de interação e, novamente, comparando o modelo anterior com este último, obteve-se o valor da estatística F de $0,887$, com o $p-valor$ de 0,72. 
+
+
+```{r tab7, message = F, echo = F, warning = F}
+
+anova_comparacao = anova(modelo, modelo1)[c(1, 2, 4, 5, 6)] %>% tidy() %>%
+      mutate(p.value = format.pval(p.value, digits = 2, eps = 0.001, na.form = NA)) %>% 
+      mutate_if(is.numeric, funs(as.character(signif(., 2)))) 
+
+colnames(anova_comparacao) = c("GL Res.", "SQ", "QM", "Estatística F", "P-valor")
+
+modelo2 = lm(media ~ TP_Esc + renda + raca + sexo + Esc_p + Esc_m + idade + n_res + .:., dat1)
+
+anova_comparacao_final = anova(modelo1, modelo2)[c(1, 2, 4, 5, 6)] %>% tidy() %>%
+      mutate(p.value = format.pval(p.value, digits = 2, eps = 0.001, na.form = NA)) %>% 
+      mutate_if(is.numeric, funs(as.character(signif(., 2))))
+
+colnames(anova_comparacao_final) = c("GL Res.", "SQ", "QM", "Estatística F", "P-valor")
+
+long_dt = cbind(anova_comparacao, anova_comparacao_final)
+
+kable(long_dt, longtable = T, booktabs = T, 
+      caption = "Tabelas ANOVA entre modelos") %>%
+  add_header_above(c("Modelo inicial \n vs \n Modelo acrescentando a Escolaridade do pai" = 5,
+                     "Modelo inicial com a Escolaridade do pai \n vs \n Modelo acrescentando as demais variáveis e interações" = 5)) %>%
+  kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+``` 
+
+
+\quad Desse modo, como não houve evidências para rejeitar a hipótese nula que os $\beta$'s associados às variáveis `Escolaridade da mãe`, `Nº de pessoas na residência` e todas as possíveis interações são iguais a zero, optou-se pelo modelo anterior. Este fato ocorre quando as variáveis adicionadas não agregam ao ajuste ou quando a mesma informação está sendo explicada por outras variáveis já presentes no modelo. Ademais, foi utilizado o método automático de seleção via AIC (critério com valor de $4192,88$), o que, por fim, obteve-se o mesmo ajuste, exceto pela variável `Nº de pessoas na residência`, a qual decidiu-se não incluir em razão do teste F visto anteriormente. A Tabela \ref{tab:tab8} consta a ANOVA do modelo escolhido.
+
+
+```{r tab8, message = F, echo = F, warning = F}
+
+anova2 = anova(modelo1)
+anova2 = tidy(anova2) %>% 
+      mutate("term" = c("Tipo de Escola", "Renda", "Raça", "Sexo", 
+                        "Escolaridade do pai", "Resíduos"))  %>% 
+      mutate(p.value = format.pval(p.value, digits = 3, eps = 0.001, na.form = NA)) %>%
+      mutate_if(is.numeric, funs(as.character(signif(.,3))))
+
+kable(anova2, linesep = "", col.names = c(" ", "GL", "SQ", "QM", "Estatística F", "P-valor"),
+      booktabs = TRUE,
+      caption = "Tabela ANOVA do modelo selecionado.") %>%
+      kable_styling(latex_options = "HOLD_position", font_size = 10)
+
+```
+
+\quad Observe que todas as variáveis selecionadas para o modelo são significantes ao nível de $\alpha = 5\%$, com somas de quadrados (extra) relativamente altas, apesar deste ir diminuindo a cada variável acrescentada ao modelo, dado ao fato sequencial da tabela ANOVA, e parte das informações das variáveis selecionadas posteriormente já ter sido explicada pelas anteriores. Sendo assim, o modelo final foi o proposto pela Equação \ref{eq:ac1}.
+
+
+```{r message = F, echo = F, eval = F}
+
+best = bestglm(as.data.frame(dat1), IC = "AIC", TopModels = 2)
+best$BestModels
+
+```
+
+
+\begin{equation}
+\label{eq:ac1}
+Y_i = 502,39 + 15,62 X_{1i} + 53,30 X_{2i} + 47,02 X_{3i} -  14,63 X_{4i} + 13,77 X_{5i} + 25,30 X_{6i} - 5,67 X_{7i} + \varepsilon_i \text{.}
+\end{equation}
+
+Onde $\varepsilon_i$ $\stackrel{i.i.d}{\sim}$ $N(0, \sigma^2)$ é um erro aleatório. Ainda: \vspace{0.1cm}
+
+\begin{itemize}
+\item $Y$: Nota média do candidato no ENEM 2019;
+\item $X_1$: Sexo Masculino; 
+\item $X_2$: EM em Escola particular;
+\item $X_3$: Renda maior que R\$ 4990,00;
+\item $X_4$: Raça (preto/pardo/indígena);
+\item $X_5$: Escolaridade do pai (EM);
+\item $X_6$: Escolaridade do pai (Superior); e
+\item $X_7$: Escolaridade do pai (Não sabe).
+\end{itemize} \vspace{0.1cm}
+
+\newpage
+
+\quad O modelo apresentou uma qualidade de ajuste relativamente baixa ($R^{2} = 33,32\%$), no entanto, como o estudo é referente a uma área que envolve, dentre outros fatores, mas principalmente comportamento humano, é de se esperar que esse valor seja baixo, pois tais características são mais difíceis de se predizer com um simples modelo de regressão linear múltipla. Ademais, esse fato está relacionado à alta soma dos quadrados dos erros presente na Tabela \ref{tab:tab8} do modelo selecionado.
+
+
+```{r, echo = F, eval = F}
+
+models <- regsubsets(media ~ ., data = dat1, nbest = 2)
+results = data.frame(cbind("p" = rowSums(summary(models)$which), summary(models)$which,
+ "Cp" = round(summary(models)$cp, 2),
+ "R2" = round(summary(models)$rsq, 2),
+ "R2adj" = round(summary(models)$adjr2, 2),
+ "BIC" = round(summary(models)$bic, 2)))
+
+results
+
+```
+
+\subsection{Diagnóstico do modelo}
+
+```{r fig5, fig.cap = "Gráficos referentes ao diagnóstico do modelo.", echo = FALSE, warning = FALSE, message = FALSE, fig.height = 4.5, fig.width = 9, fig.align = "center"}
+
+# model diagnostic
+
+modelo1 = lm(media ~ TP_Esc + renda + raca + sexo + Esc_p, dat1)
+
+residuos = autoplot(modelo1)[c(1,2)] + theme_bw()
+
+xLabs = c("Valores Ajustados", "Quantis Teóricos")
+yLabs = c("Resíduos", "Resíduos Padronizados")
+titles = c("Resíduos vs Ajuste", "Q-Q Normal")
+
+for (i in 1:2){
+  
+  residuos[i] = residuos[i] + xlab(xLabs[i]) + ylab(yLabs[i]) + ggtitle(titles[i])
+  
+}
+
+residuos
+```
+
+\quad No que tange ao diagnóstico do modelo, para que se possa garantir a interpretação dos estimadores, deve-se conferir o comportamento dos resíduos, se esses seguem uma normalidade e se são homocesdásticos, i.e., a variância é constante, dada a suposição $\varepsilon_i$ $\stackrel{i.i.d}{\sim}$ $N(0, \sigma^2)$. Logo, analisando o primeiro gráfico da Figura \ref{fig:fig5}, nota-se que, de fato, os erros estão centrados em zero, no entanto, não é possível garantir a homocedasticidade apenas por esse gráfico, pois aparenta existir outliers próximo aos valores de $500$ pontos na nota média ajustada. Sendo assim, foi analisado o maior resíduo semi-studentizado ($d_{máx}$), como $d_{máx}=$ `r format(max(rstudent(modelo1)), digits = 3)` $<4$, não há outliers associado ao modelo selecionado em relação à variável resposta média.
+
+
+\quad Desse modo, recorrendo ao segundo gráfico da Figura \ref{fig:fig5}, observa-se que os resíduos possuem uma normalidade bem condizente, então, para não se restringir apenas a aspectos visuais, foi realizado o teste de Shapiro-Wilk, obtendo o valor da estatística de `r format(shapiro.test(modelo1$residuals)[2]$p.value, digits = 2)`, de modo que não há evidências para rejeitar a hipótese de normalidade dos erros. Para verificar a homocedasticidade, foi realizado o teste de Breusch-Pagan, cuja hipótese nula diz respeito se a variância do modelo é constante, sendo assim, o $p-valor$ associado à estatística desse teste foi de `r format(ncvTest(modelo1)[5]$p, digits = 2)` e, portanto, não há evidências para rejeitar a hipótese de homocedasticidade.
+
+
+```{r fig6,  echo = FALSE, warning = FALSE, message = FALSE, fig.height = 3.28, fig.width = 3.8, fig.align = "center", eval = F}
+
+
+# Boxcox transformation (was not needed)
+
+fitbc = boxcox(modelo1, las = 1, ylab = "log-Verossimilhança")
+maximo = which.max(fitbc$y)
+lambda = fitbc$x[maximo]
+
+# Graph residuo(modelofinal) x residuo(primeiromodelo)
+
+rsd_first_fit = resid(modelo)
+rsd_final_fit = resid(modelo1)
+df = data.frame(rsd_first_fit, rsd_final_fit)
+
+df %>% ggplot(aes(rsd_first_fit, rsd_final_fit)) +
+  geom_point()
+  
+```
+
+\section{Resultados}
+
+\quad No modelo ajustado para a nota média no exame, conforme a Equação \ref{eq:ac1}, tem-se que quando o candidato é de escola pública, com renda familiar de até R\$ $998,00$ reais, pertencente ao grupo de raça branca/amarela, do sexo feminino e com pai cuja escolaridade é apenas o ensino fundamental, a nota média esperada é de $502,39$ pontos. 
+
+\quad Agora, alterando-se uma variável e mantendo todas as outras inalteráveis, tem-se que, para o candidato que fez o Ensino Médio em um sistema de ensino particular, a nota tem um aumento de, em média, $53,30$ pontos. Ademais, tratando-se da variável renda, para candidatos que tem uma renda familiar maior do que R\$ $4990,00$ reais, o desempenho aumenta, em média, $47,02$ pontos. Ainda, se o candidato pertencer ao grupo de raças preta/parda/indígena, a nota esperada diminui, em média, $14,63$ e, se o candidato for do sexo masculino, o desempenho médio esperado aumenta, em média, $15,62$ pontos. 
+
+\quad Ainda, quando a escolaridade do pai for a nível de Ensino Médio, a nota do candidato aumenta, em média, $13,77$ e quando for de superior, o desempenho aumenta, em média, $25,30$ pontos.  No entanto, quando o candidato desconhece a escolaridade do pai, seu desempenho reduz, em média, $5,67$ pontos.
+
+\section{Conclusão}
+
+\quad Por fim, é evidente que o desempenho do aluno no ENEM de 2019 foi intrinsecamente associado a questões socioeconômicas que, infelizmente, permeiam até os dias atuais, principalmente quando se trata da desigualdade no contexto racial. Embora o coeficiente de determinação ($R^2$) tenha apresentado um baixo valor, as variáveis selecionadas para o modelo são pertinentes para a análise e estudo do caso. Obviamente que é muito difícil de se predizer exatamente a nota de um candidato, pois envolve inúmeras variáveis, entre elas variáveis latentes (como estresse e nervosismo, no momento do exame), e isso inflaciona a soma dos quadrados dos resíduos, diminuindo o valor da estatística $R^2$.
+
+\begin{thebibliography}{9}
+\bibitem{link(1)}\url{https://blog.minitab.com/pt/analise-de-regressao-como-interpretar-o-r-quadrado-e-avaliar-a-qualidade-de-ajuste}
+\end{thebibliography}
+
